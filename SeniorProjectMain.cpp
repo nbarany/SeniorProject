@@ -1,6 +1,7 @@
 //VERSION 1.0.0
-//REVISION DAY: 3/17/2015
-//CURRENT PROBLEMS: BIAMP MENU GOING INTO CONFIRM CAUSING ISSUES, NEED PRINTLNS TO DEBUG
+//REVISION DAY: 3/18/2015
+//CURRENT PROBLEMS: DOUBLE BACK FUNCTION ONLY GOING UP ONE TIME INSTEAD OF TWO TIMES
+//                  ALSO ONLY BI-AMP BRANCH IS FULLY UPDATED CORRECTLY
 #include "LCDDriver.h"
 #include "RotaryEncoder.h"
 #include <avr/io.h>
@@ -56,8 +57,16 @@ int menu[5] = {0,0,0,0,0};
 void back()
 {
     //go up a level
+    is_pressed = 0;
     menu[menu[0]] = 0;    
-    menu[0]--;            
+    menu[0]--;
+    
+    Serial.print(menu[0]);
+  Serial.print(menu[1]);
+  Serial.print(menu[2]);
+  Serial.print(menu[3]);
+  Serial.println(menu[4]);
+        
 }
 void dubback()
 {
@@ -66,44 +75,55 @@ void dubback()
     menu[0]--;
     menu[menu[0]] = 0;
     menu[0]--;
+     Serial.print(menu[0]);
+  Serial.print(menu[1]);
+  Serial.print(menu[2]);
+  Serial.print(menu[3]);
+  Serial.println(menu[4]);
 }
 
 void menu_update()
 {
+  Serial.print(F("turn_dir: "));
+  Serial.println(turn_dir);
+  Serial.print(F("is_pressed: "));
+  Serial.println(is_pressed);
+  Serial.print(F("is_released: "));
+  Serial.println(is_released);
   switch(menu[1])
   {
     case 0:
        if(turn_dir)   //if knob is turned right or left
        {
-        volume += turn_dir;     
-        Serial.print(F("Volume:"));
-        Serial.println(volume);
-        //temp = 10pow(volume/10)
-        //safeWriteReg((pow(10.0,(double(volume)/10.0))),I2C_ADDR_ADAU1702w,SAFELOAD_DATA1, SAFELOAD_ADDR1, ****addressofVolume****);lcd
-        sprintf(buf, "Volume: %d dB", volume);
-      }  
-      else if(is_pressed == 1)
-      {
+          volume += turn_dir;     
+          Serial.print(F("Volume:"));
+          Serial.println(volume);
+          //temp = 10pow(volume/10)
+          //safeWriteReg((pow(10.0,(double(volume)/10.0))),I2C_ADDR_ADAU1702w,SAFELOAD_DATA1, SAFELOAD_ADDR1, ****addressofVolume****);lcd
+          sprintf(buf, "Volume: %d dB", volume);
+       }  
+       else if(is_pressed == 1)
+       {
          //one menu level deeper
          menu[0]++;   
          menu[1]++;
          is_pressed = 0;   
-      }
-    break;
+       }
+    break; //break menu[1]
     
     case 1:
       
          switch(menu[2])
          {
-           case 0:
-           //Speaker Setup Branch
+             case 0:
+             //Speaker Setup Branch
                  if(is_released == 1)
                  {
                     sprintf(buf, "Speaker Setup");
                     is_released = 0;     
                  }
                  //Scrolling Criteria  
-                 if(turn_dir == 1)  
+                 else if(turn_dir == 1)  
                  {
                     menu[1] += turn_dir;
                     sprintf(buf, "Crossover");
@@ -118,8 +138,9 @@ void menu_update()
                    menu[0]++;
                    menu[2]++;
                    is_pressed = 0;
+                   sprintf(buf, "Bi-Amp");
                  }        
-                 break;
+	     break;
                
              case 1:
              //Bi-Amp
@@ -127,13 +148,14 @@ void menu_update()
                  switch(menu[3])
                  {
                      case 0:
+                     //Serial.println(turn_dir);
                      //Bi-amp Mode [2,1,1,0,0]
                      if(is_released == 1)
                      {
                        sprintf(buf, "Bi-Amp");
                        is_released = 0;
                      }
-                     if(turn_dir == 1)  
+                     else if(turn_dir == 1)  
                      {
                         menu[2] += turn_dir;
                         sprintf(buf, "Stereo + Sub");
@@ -148,6 +170,7 @@ void menu_update()
                        menu[0]++;
                        menu[3]++;
                        is_pressed = 0;
+                       sprintf(buf, "Confirm: Y?");
                      }
                      break;
 
@@ -180,18 +203,18 @@ void menu_update()
                      else if(is_pressed == 1)
                      {
                        //Return to Speaker Setup
-                       back();
-                       
                        is_pressed == 0;
+                       sprintf(buf, "Speaker Setup");
+                       dubback();                       
                      }
                      break;
                                           
                  }
-              break;
+             break;
               
-              case 2:
-              //Stereo+Sub [2,1,2,0,0]   
-                  switch(menu[3])
+             case 2:
+             //Stereo+Sub [2,1,2,0,0]   
+                 switch(menu[3])
                      {
                          case 0:
                          //Stereo+Sub 
@@ -207,73 +230,69 @@ void menu_update()
                          }
                          else if(is_pressed == 1)
                          {
-                           menu[0]++;
-                           menu[3]++;
-                           is_pressed = 0;
+                            menu[0]++;
+                            menu[3]++;
+                            is_pressed = 0;
                          }
                          break;
     
                          //CONFIRM STEREO-SUB MODE
-                       case 1:
-                       if(is_released == 1)
-                       {
-                         sprintf(buf, "Confirm: Y?");
-                         is_released = 0;
-                       }
-                       else if(turn_dir == 1 || turn_dir == -1)  
-                       {
-                          menu[3] = 2;
-                          sprintf(buf, "Confirm: N?");
-                       }
-                       else if(is_pressed == 1)
-                       {
-                         //Set Stereo-Sub Mode
-                         //SUB_download();
-                       }
-                       break;
-                       
-                       //CONFIRM Stereo-sub BACK
-                       case 2:
-                       if(turn_dir == 1 || turn_dir == -1)  
-                       {
-                          menu[3] = 1;
-                          sprintf(buf, "Confirm: Y?");
-                       }
-                       else if(is_pressed == 1)
-                       {
-                         //Return to Speaker Setup
-                         back();
-                         is_pressed == 0;
-                       }
-                       break;                     
-                  }   
-               break;
-            
-               case 3:
-               //Back [2,1,3,0,0]   
-                  switch(menu[3])
-                     {
-                         case 0:
-                         //Back 
-                         if(turn_dir == 1)  
+                         case 1:
+                         if(is_released == 1)
                          {
-                            menu[2] = 1;
-                            sprintf(buf, "Bi-Amp");
+                            sprintf(buf, "Confirm: Y?");
+                            is_released = 0;
                          }
-                         else if(turn_dir == -1)
+                         else if(turn_dir == 1 || turn_dir == -1)  
                          {
-                            menu[2] += turn_dir;   //Wrap around left side of menu
-                            sprintf(buf, "Stereo+Sub");
+                            menu[3] = 2;
+                            sprintf(buf, "Confirm: N?");
                          }
                          else if(is_pressed == 1)
                          {
-                           //Back function
-                           back();
-                           is_pressed = 0;
+                            //Set Stereo-Sub Mode
+                            //SUB_download();
                          }
-                         break;                     
-                     }   
-               break;
+                         break;
+                       
+                         //CONFIRM Stereo-sub BACK
+                         case 2:
+                         if(turn_dir == 1 || turn_dir == -1)  
+                         {
+                            menu[3] = 1;
+                            sprintf(buf, "Confirm: Y?");
+                         }
+                         else if(is_pressed == 1)
+                         {
+                         //Return to Speaker Setup
+                         is_pressed == 0;
+                         back();                         
+                         }
+                         break;							 
+                    } // End of Stereo-Sub 
+                 break;
+            
+                 case 3:
+                 //Back [2,1,3,0,0]   
+					 //Back 
+					 if(turn_dir == 1)  
+					 {
+						menu[2] = 1;
+						sprintf(buf, "Bi-Amp");
+					 }
+					 else if(turn_dir == -1)
+					 {
+						menu[2] += turn_dir;   //Wrap around left side of menu
+						sprintf(buf, "Stereo+Sub");
+					 }
+					 else if(is_pressed == 1)
+					 {
+					   //Back function
+                                           is_pressed = 0;
+					   back();					   
+					 }
+                         
+                 break;
                   
          } 
     break;
@@ -282,7 +301,15 @@ void menu_update()
   
   LCD_cmd_clr();  
   delay(100);
-  lcd_write_str(buf);    
+  lcd_write_str(buf);
+  Serial.print(F("Menu: "));
+  Serial.print(menu[0]);
+  Serial.print(menu[1]);
+  Serial.print(menu[2]);
+  Serial.print(menu[3]);
+  Serial.println(menu[4]);
+  Serial.println(buf);
+  Serial.println("");  
 }
 
 void setup() {
