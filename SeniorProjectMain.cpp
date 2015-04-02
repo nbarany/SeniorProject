@@ -1,3 +1,7 @@
+//VERSION 1.0.0
+//REVISION DAY: 4/2/2015
+//CURRENT PROBLEMS: DOUBLE BACK FUNCTION ONLY GOING UP ONE TIME INSTEAD OF TWO TIMES
+//                  BI-AMP AND CROSSOVER BRANCHES IMPLEMENTED (ROUGH)
 #include "LCDDriver.h"
 #include "RotaryEncoder.h"
 #include <avr/io.h>
@@ -6,9 +10,10 @@
 int volume = -40;
 int is_pressed = 0;
 int is_released = 0;
+int turn_dir = 0;
 int pos = 0;
 char buf[20];
-//buf[0] = '\0';
+
 
 int LCDscreen_init()
 {
@@ -49,75 +54,409 @@ RotaryEncoder encoder(A2, A3);
 volatile int count = 0;
 int menu[5] = {0,0,0,0,0};
 
+void back()
+{
+    //go up a level
+    is_pressed = 0;
+    menu[menu[0]] = 0;    
+    menu[0]--;
+    
+    Serial.print(menu[0]);
+  Serial.print(menu[1]);
+  Serial.print(menu[2]);
+  Serial.print(menu[3]);
+  Serial.println(menu[4]);
+        
+}
+void dubback()
+{
+    //go up 2 levels (for confirm levels)
+    menu[menu[0]] = 0;
+    menu[0]--;
+    menu[menu[0]] = 0;
+    menu[0]--;
+    Serial.print(menu[0]);
+    Serial.print(menu[1]);
+    Serial.print(menu[2]);
+    Serial.print(menu[3]);
+    Serial.println(menu[4]);
+}
+
 void menu_update()
 {
+  Serial.print(F("turn_dir: "));
+  Serial.println(turn_dir);
+  Serial.print(F("is_pressed: "));
+  Serial.println(is_pressed);
+  Serial.print(F("is_released: "));
+  Serial.println(is_released);
   switch(menu[1])
   {
     case 0:
-       
-       Serial.print(volume,DEC);
-       Serial.print("\n");
-       //adjust volume
-       if(pos)   //if knob is turned right or left
-      {
-        volume += pos;
-        pos = 0; 
-        
-        Serial.print(volume,DEC);
-        Serial.print("\n");
-        //temp = 10pow(volume/10)
-        //safeWriteReg((pow(10.0,(double(volume)/10.0))),I2C_ADDR_ADAU1702w,SAFELOAD_DATA1, SAFELOAD_ADDR1, ****addressofVolume****);lcd
-        //LCD_cmd_clr();
-        //delay(100);
-        sprintf(buf, "Volume: %d dB", volume);
-        lcd_write_str(buf);
-      }  
-      else if(is_pressed == 1)
-      {
+       if(turn_dir)   //if knob is turned right or left
+       {
+          volume += turn_dir;     
+          Serial.print(F("Volume:"));
+          Serial.println(volume);
+          //temp = 10pow(volume/10)
+          //safeWriteReg((pow(10.0,(double(volume)/10.0))),I2C_ADDR_ADAU1702w,SAFELOAD_DATA1, SAFELOAD_ADDR1, ****addressofVolume****);lcd
+          sprintf(buf, "Volume: %d dB", volume);
+       }  
+       else if(is_pressed == 1)
+       {
          //one menu level deeper
          menu[0]++;   
          menu[1]++;
          is_pressed = 0;   
-      }
-    break;
+       }
+    break; //break menu[1]
+    
     case 1:
-       //Speaker Setup Branch
-       if(is_released == 1)
-       {
-         //LCD_cmd_clr(); 
-         //delay(100);
-         sprintf(buf, "Speaker Setup");
-          lcd_write_str(buf);
-          is_released = 0;     
-       }
-       //Scrolling Criteria  
-       if(pos > 0)  
-       {
-          menu[1] += pos;
-          pos = 0;
-          //LCD_cmd_clr();
-          //delay(100);
-          sprintf(buf, "Crossover");
-          lcd_write_str(buf);
-       }
-       else if(pos < 0)
-       {
-          menu[1] = 4;
-          pos = 0;
-          //LCD_cmd_clr();
-          //delay(100);
-          sprintf(buf, "Speaker Prot");
-          lcd_write_str(buf);
-       }
-       else if(is_pressed == 1)
-       {
-         menu[0]++;
-         menu[2]++;
-         is_pressed = 0;
-       }      
-    break;   
-  }    
-       
+         switch(menu[2])
+         {
+             case 0:
+             //Speaker Setup Branch [1,1,0,0,0]
+                 if(is_released == 1)
+                 {
+                    sprintf(buf, "Speaker Setup");
+                    is_released = 0;     
+                 }
+                 //Scrolling Criteria  
+                 else if(turn_dir == 1)  
+                 {
+                    menu[1] += turn_dir;
+                    sprintf(buf, "Crossover");
+                 }
+                 else if(turn_dir == -1)
+                 {
+                    menu[1] = 4;   //Wrap around left side of menu
+                    sprintf(buf, "Speaker Prot");
+                 }
+                 else if(is_pressed == 1)
+                 {
+                   menu[0]++;
+                   menu[2]++;
+                   is_pressed = 0;
+                   sprintf(buf, "Bi-Amp");
+                 }        
+	         break;
+               
+             case 1:
+             //Bi-Amp [2,1,1,0,0]
+             
+                 switch(menu[3])
+                 {
+                     case 0:
+                     //Bi-amp Mode [2,1,1,0,0]
+                     if(is_released == 1)
+                     {
+                       sprintf(buf, "Bi-Amp");
+                       is_released = 0;
+                     }
+                     else if(turn_dir == 1)  
+                     {
+                        menu[2] += turn_dir;
+                        sprintf(buf, "Stereo + Sub");
+                     }
+                     else if(turn_dir == -1)
+                     {
+                        menu[2] = 3;   //Wrap around left side of menu
+                        sprintf(buf, "Back");
+                     }
+                     else if(is_pressed == 1)
+                     {
+                       menu[0]++;
+                       menu[3]++;
+                       is_pressed = 0;
+                       sprintf(buf, "Confirm: Y?");
+                     }
+                     break;
+
+                     //CONFIRM BI-AMP MODE [3,1,1,1,0]
+                     case 1:
+                     if(is_released == 1)
+                     {
+                       sprintf(buf, "Confirm: Y?");
+                       is_released = 0;
+                     }
+                     else if(turn_dir == 1 || turn_dir == -1)  
+                     {
+                        menu[3] = 2;
+                        sprintf(buf, "Confirm: N?");
+                     }
+                     else if(is_pressed == 1)
+                     {
+                       //Set Bi-Amp Mode
+                       //NOSUB_download();
+                     }
+                     break;
+                     
+                     //CONFIRM BI-AMP BACK [3,1,1,2,0]
+                     case 2:
+                     if(turn_dir == 1 || turn_dir == -1)  
+                     {
+                        menu[3] = 1;
+                        sprintf(buf, "Confirm: Y?");
+                     }
+                     else if(is_pressed == 1)
+                     {
+                       //Return to Speaker Setup
+                       is_pressed == 0;
+                       sprintf(buf, "Speaker Setup");
+                       dubback();                       
+                     }
+                     break;
+                                          
+                 }
+             break;
+              
+             case 2:
+             //Stereo+Sub [2,1,2,0,0]   
+                 switch(menu[3])
+				 {
+					 case 0:
+					 //Stereo+Sub 
+					 if(turn_dir == 1)  
+					 {
+						menu[2] += turn_dir;
+						sprintf(buf, "Back");
+					 }
+					 else if(turn_dir == -1)
+					 {
+						menu[2] += turn_dir;   //Wrap around left side of menu
+						sprintf(buf, "Bi-Amp");
+					 }
+					 else if(is_pressed == 1)
+					 {
+						menu[0]++;
+						menu[3]++;
+						is_pressed = 0;
+					 }
+					 break;
+
+					 //CONFIRM STEREO-SUB MODE [3,1,2,1,0]
+					 case 1:
+					 if(is_released == 1)
+					 {
+						sprintf(buf, "Confirm: Y?");
+						is_released = 0;
+					 }
+					 else if(turn_dir == 1 || turn_dir == -1)  
+					 {
+						menu[3] = 2;
+						sprintf(buf, "Confirm: N?");
+					 }
+					 else if(is_pressed == 1)
+					 {
+						//Set Stereo-Sub Mode
+						//SUB_download();
+					 }
+					 break;
+				   
+					 //CONFIRM Stereo-sub BACK
+					 case 2:
+					 if(turn_dir == 1 || turn_dir == -1)  
+					 {
+						menu[3] = 1;
+						sprintf(buf, "Confirm: Y?");
+					 }
+					 else if(is_pressed == 1)
+					 {
+					 //Return to Speaker Setup
+					 is_pressed == 0;
+					 back();                         
+					 }
+					 break;							 
+				} // End of Stereo-Sub 
+			 break;
+		
+			 case 3:
+			 //Back [2,1,3,0,0]   
+				 if(turn_dir == 1)  
+				 {
+					menu[2] = 1;
+					sprintf(buf, "Bi-Amp");
+				 }
+				 else if(turn_dir == -1)
+				 {
+					menu[2] += turn_dir;   //Wrap around left side of menu
+					sprintf(buf, "Stereo+Sub");
+				 }
+				 else if(is_pressed == 1)
+				 {
+				   //Back function
+				   is_pressed = 0;
+				   back();					   
+				 }
+				
+			 break;
+                  
+         } 
+    break;
+//------------------------------END OF SPEAKER SETUP BRANCH-----------------------------------------------
+
+     case 2:
+		 switch(menu[2])
+			 {
+				 case 0:
+				 //Crossover Branch [1,2,0,0,0]
+					 sprintf(buf, "Crossover");     
+					 
+					 //Scrolling Criteria  
+					 if(turn_dir == 1)  
+					 {
+						menu[1] += turn_dir;
+						sprintf(buf, "Equalizer");
+					 }
+					 else if(turn_dir == -1)
+					 {
+						menu[1] += turn_dir;
+						sprintf(buf, "Speaker Setup");
+					 }
+					 else if(is_pressed == 1)
+					 {
+					   menu[0]++;
+					   menu[2]++;
+					   is_pressed = 0;
+					 }        
+				 break;
+				 
+				 case 1:
+				 // Filter Type Branch
+				    switch(menu[3])
+					{
+						 case 0:
+						 //Filter Type [2,2,1,0,0]
+						 if(is_released == 1)
+						 {
+						   sprintf(buf, "Filter Type");
+						   is_released = 0;
+						 }
+						 else if(turn_dir == 1)  
+						 {
+							menu[2] += turn_dir;
+							sprintf(buf, "Frequency");
+						 }
+						 else if(turn_dir == -1)
+						 {
+							menu[2] = 3;   //Wrap around left side of menu
+							sprintf(buf, "Back");
+						 }
+						 else if(is_pressed == 1)
+						 {
+						   menu[0]++;
+						   menu[3]++;
+						   is_pressed = 0;
+						 }
+						 break; 
+						 
+						 case 1:
+						 //Update Filter Type [3,2,1,1,0]
+						 if(is_released == 1)
+						 {
+						   sprintf(buf, "Update Filter");
+						   is_released = 0;
+						   //Need to implement push-turn parameter changing
+						 }
+						 break;
+					}
+				 break;
+				 
+				 case 2:
+				 // Frequency Branch
+				    switch(menu[3])
+					{
+						 case 0:
+						 //Frequency [2,2,2,0,0]
+						 if(turn_dir == 1)  
+						 {
+							menu[2] += turn_dir;
+							sprintf(buf, "Back");
+						 }
+						 else if(turn_dir == -1)
+						 {
+							menu[2] += turn_dir;   //Wrap around left side of menu
+							sprintf(buf, "Filter Type");
+						 }
+						 else if(is_pressed == 1)
+						 {
+							menu[0]++;
+							menu[3]++;
+							is_pressed = 0;
+						 }
+						 break; 
+						 
+						 case 1:
+						 if(is_released == 1)
+						 {
+						   sprintf(buf, "Update FREQ?");
+						   is_released = 0;
+						   //Need to implement push-turn parameter changing
+						 }
+						 break;
+					}
+				 break;
+				 
+				 case 3:
+				 //Back [2,2,3,0,0]
+					 if(turn_dir == 1)  
+					 {
+						menu[2] = 1;  //Wrap around side of menu
+						sprintf(buf, "Filter Type");
+					 }
+					 else if(turn_dir == -1)
+					 {
+						menu[2] += turn_dir;   
+						sprintf(buf, "Frequency");
+					 }
+					 else if(is_pressed == 1)
+					 {
+						back();
+						is_pressed = 0;
+					 }
+				 break; 
+			}
+	 break;			 
+//------------------------------END OF CROSSOVER BRANCH-----------------------------------------------
+	case 3:
+		 switch(menu[2])
+			 {
+				 case 0:
+				 //Equalizer Branch [1,3,0,0,0]
+					 sprintf(buf, "Equalizer");     
+					 
+					 //Scrolling Criteria  
+					 if(turn_dir == 1)  
+					 {
+						menu[1] += turn_dir;
+						sprintf(buf, "Speaker Prot");
+					 }
+					 else if(turn_dir == -1)
+					 {
+						menu[1] += turn_dir;
+						sprintf(buf, "Crossover");
+					 }
+					 else if(is_pressed == 1)
+					 {
+					   menu[0]++;
+					   menu[2]++;
+					   is_pressed = 0;
+					 }        
+				 break;
+             }
+}
+  
+  LCD_cmd_clr();  
+  delay(100);
+  lcd_write_str(buf);
+  Serial.print(F("Menu: "));
+  Serial.print(menu[0]);
+  Serial.print(menu[1]);
+  Serial.print(menu[2]);
+  Serial.print(menu[3]);
+  Serial.println(menu[4]);
+  Serial.println(buf);
+  Serial.println("");  
 }
 
 void setup() {
@@ -138,7 +477,6 @@ void setup() {
 ISR(PCINT1_vect) {
   noInterrupts();
   encoder.tick(); // just call tick() to check the state.
-  menu_update();
   interrupts();
 }
 
@@ -147,27 +485,30 @@ ISR(PCINT2_vect) {
    noInterrupts();
    if(digitalRead(2) == 0)   //active low button aka press down
    {
-     is_pressed = 1;
-     menu_update();
+     is_pressed = 1;  
    }
    else                      // button release 
    {
      is_released = 1;
-     menu_update();
    }
    interrupts();
 }
 
 void loop() {
-  // put your main code here, to run repeatedly:
   
-
+  
   int newPos = encoder.getPosition();
   if (newPos != pos) {
     //Serial.print(newPos);
     //Serial.println();
+    turn_dir = newPos - pos;
     pos = newPos;
-    
   }
   
+  //Variable updates depending on whether turn right/left or button 
+  if(turn_dir || is_pressed || is_released) //if any menu change interrupt occurs
+  {
+    menu_update();  //change menu
+    turn_dir = 0;   //reset position vector
+  }  
 }
